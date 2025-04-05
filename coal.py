@@ -8,7 +8,7 @@ class Coal:
     def __init__(self):
         self.randomize()
         try:
-            self.image = pygame.image.load("Graphics/apple.png").convert_alpha()
+            self.image = pygame.image.load("coal.png").convert_alpha()
             self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE // 2))
         except:
             self.image = None
