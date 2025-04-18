@@ -13,7 +13,7 @@ class Menu:
 
     def draw(self, screen, screen_width, screen_height):
         overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 128))
+        overlay.fill((0, 0, 0, 224))
         screen.blit(overlay, (0, 0))
 
         title_text = self.title_font.render(self.title, True, (255, 255, 255))
