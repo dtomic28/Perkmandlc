@@ -10,7 +10,7 @@ class Coal:
         try:
             self.image = pygame.image.load("assets/coal.png").convert_alpha()
             self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE // 2))
-        except:
+        except Exception:
             self.image = None
 
     def draw(self, screen):

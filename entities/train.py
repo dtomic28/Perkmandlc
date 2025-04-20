@@ -11,7 +11,6 @@ from pygame.math import Vector2
 
 from entities.powerup_entity import PowerUpType
 from powerups.speed_boost import SpeedBoost
-from powerups.base_powerup import BasePowerUp
 
 
 class Train:
