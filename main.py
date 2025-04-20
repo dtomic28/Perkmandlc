@@ -1,11 +1,13 @@
+import random
 import pygame
 import sys
 from pygame.math import Vector2
-from constants import *
-from train import Train
-from coal import *
-from menu import *
-from utils import is_first_time, mark_tutorial_done, load_high_score, save_high_score
+from constants import CELL_COUNT, CELL_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, SKY_COLOR
+from entities.powerup_entity import PowerUpEntity, PowerUpType
+from entities.train import Train
+from entities.coal import Coal
+from menu import MainMenu, Menu, YouDiedMenu
+from utils import is_first_time, mark_tutorial_done
 
 pygame.init()
 
@@ -30,7 +32,12 @@ class Game:
         self.tutorial_mode = is_first_time()
         self.tutorial_step = 0
         self.key_pressed_after_completion = False
-
+        self.world_powerups = []
+        self.powerup_images = {
+            PowerUpType.SPEED_BOOST: pygame.image.load(
+                "assets/speed_boost_temp.png"
+            ).convert_alpha(),
+        }
         self.tutorial_steps = [
             {
                 "message": "Welcome to Perkmandelc! Use the arrow keys to move.",
@@ -50,9 +57,22 @@ class Game:
             },
         ]
 
+    def spawn_random_powerup(self):
+        margin = 3  # avoid edge
+        x = random.randint(margin, CELL_COUNT - 1 - margin)
+        y = random.randint(0, (CELL_COUNT // 2) - 1) * 2
+        y = max(y, margin)
+        y = min(y, CELL_COUNT - 1 - margin)
+
+        pos = Vector2(x, y)
+        ptype = random.choice(list(self.powerup_images.keys()))
+        image = self.powerup_images[ptype]
+
+        self.world_powerups.append(PowerUpEntity(ptype, pos, image))
+
     def update(self):
         if not self.paused and not self.in_main_menu and not self.you_died_menu:
-            self.train.move()
+            self.train.update()
             self.check_collision()
             self.check_fail()
 
@@ -85,6 +105,8 @@ class Game:
             self.coal.draw(self.screen)
             self.train.draw(self.screen)
             self.draw_score()
+            for powerup in self.world_powerups:
+                powerup.draw(self.screen)
             if self.paused:
                 if self.options_menu:
                     self.options_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -199,6 +221,11 @@ class Game:
         for block in self.train.body[1:]:
             if block == self.coal.pos:
                 self.coal.randomize()
+        for pu in self.world_powerups:
+            if pu.pos == self.train.body[0]:  # Train head
+                self.train.collect_powerup(pu.type)
+                self.world_powerups.remove(pu)
+                break
 
     def check_fail(self):
         if (
@@ -317,6 +344,10 @@ while True:
                     -1, 0
                 ):
                     main_game.train.direction = Vector2(1, 0)
+
+                if event.key == pygame.K_p:
+                    main_game.spawn_random_powerup()
+
             if event.key == pygame.K_ESCAPE:
                 main_game.toggle_pause()
             if (

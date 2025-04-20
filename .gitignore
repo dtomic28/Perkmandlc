@@ -173,3 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 tutorial_flag.txt
+save_data.json

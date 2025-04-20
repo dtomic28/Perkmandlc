@@ -8,7 +8,7 @@ class Coal:
     def __init__(self):
         self.randomize()
         try:
-            self.image = pygame.image.load("coal.png").convert_alpha()
+            self.image = pygame.image.load("assets/coal.png").convert_alpha()
             self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE // 2))
         except:
             self.image = None
@@ -22,6 +22,12 @@ class Coal:
         screen.blit(self.image, (x, y))
 
     def randomize(self):
-        self.pos = Vector2(
-            random.randint(0, CELL_COUNT - 1), random.randint(0, CELL_COUNT - 1)
-        )
+        # Margin from border
+        margin = 3
+
+        x = random.randint(margin, CELL_COUNT - 1 - margin)
+        y = random.randint(0, (CELL_COUNT // 2) - 1) * 2
+        y = max(y, margin)
+        y = min(y, CELL_COUNT - 1 - margin)
+
+        self.pos = Vector2(x, y)
