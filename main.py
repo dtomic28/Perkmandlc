@@ -28,6 +28,8 @@ class Game:
         self.you_died_menu = None
         self.main_menu = MainMenu(callback=self.handle_main_menu_selection)
         self.in_main_menu = True
+        self.is_multiplayer = False
+        self.ai_spawned = False
         self.difficulty = "Medium"
         self.tutorial_mode = is_first_time()
         self.tutorial_step = 0
@@ -51,11 +53,21 @@ class Game:
                 "message": "You did it! Now Collect coals to get more carts and score points.",
                 "condition": self.check_apple_eaten,
             },
-            {
-                "message": "Great job! You're ready to play on your own.",
-                "condition": self.check_key_press_after_completion,
-            },
         ]
+        if (self.is_multiplayer):
+            self.tutorial_steps.append(
+                 {
+                "message": "Great job! You're ready to play. but be careful you are not on your own.",
+                "condition": self.check_key_press_after_completion,
+            }
+            )
+        else:
+            self.tutorial_steps.append(
+                 {  
+                "message": "Great job! You're ready to play. but you won't be alone.",
+                "condition": self.check_key_press_after_completion,
+            }
+            )
 
     def spawn_random_powerup(self):
         margin = 3  # avoid edge
@@ -146,8 +158,11 @@ class Game:
             self.pause_menu = None
 
     def handle_main_menu_selection(self, option):
-        if option == "Start Game":
+        if option == "Start Singleplayer":
             self.in_main_menu = False
+        elif option == "Start Multiplayer":
+            self.in_main_menu = False
+            self.is_multiplayer = True
         elif option == "Credits":
             self.show_credits()
         elif option == "Options":
@@ -308,9 +323,16 @@ while True:
             if main_game.tutorial_step >= len(main_game.tutorial_steps):
                 main_game.tutorial_mode = False
                 mark_tutorial_done()
+                if main_game.is_multiplayer:
+                    #spawn the ai here
+                    print("spawn the ai here")
             else:
                 main_game.key_pressed_after_completion = False
-
+    else:
+        if main_game.is_multiplayer and not main_game.ai_spawned:
+            #spawn the ai here too
+            print("spawn the ai here too")
+            main_game.ai_spawned = True
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()

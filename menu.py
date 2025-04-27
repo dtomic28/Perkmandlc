@@ -46,7 +46,7 @@ class MainMenu(Menu):
     def __init__(self, callback):
         super().__init__(
             title="Train Game",
-            options=["Start Game", "Credits", "Options", "Quit Game"],
+            options=["Start Singleplayer", "Start Multiplayer" ,"Credits", "Options", "Quit Game"],
             callback=callback,
         )
 
