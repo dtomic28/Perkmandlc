@@ -35,6 +35,9 @@ class Game:
         self.tutorial_step = 0
         self.key_pressed_after_completion = False
         self.world_powerups = []
+
+        self.coal.spawn_random(3)
+
         self.powerup_images = {
             PowerUpType.SPEED_BOOST: pygame.image.load(
                 "assets/speed_boost_temp.png"
@@ -54,19 +57,19 @@ class Game:
                 "condition": self.check_apple_eaten,
             },
         ]
-        if (self.is_multiplayer):
+        if self.is_multiplayer:
             self.tutorial_steps.append(
-                 {
-                "message": "Great job! You're ready to play. but be careful you are not on your own.",
-                "condition": self.check_key_press_after_completion,
-            }
+                {
+                    "message": "Great job! You're ready to play. but be careful you are not on your own.",
+                    "condition": self.check_key_press_after_completion,
+                }
             )
         else:
             self.tutorial_steps.append(
-                 {  
-                "message": "Great job! You're ready to play. but you won't be alone.",
-                "condition": self.check_key_press_after_completion,
-            }
+                {
+                    "message": "Great job! You're ready to play. but you won't be alone.",
+                    "condition": self.check_key_press_after_completion,
+                }
             )
 
     def spawn_random_powerup(self):
@@ -230,12 +233,16 @@ class Game:
         self.train.reset()
 
     def check_collision(self):
-        if self.coal.pos == self.train.body[0]:
-            self.coal.randomize()
+        if self.coal.check_pickup(self.train.body[0]):
             self.train.grow()
+            self.coal.spawn_random()
+
+        # Optional: Prevent food from spawning on tail
         for block in self.train.body[1:]:
-            if block == self.coal.pos:
-                self.coal.randomize()
+            if block in self.coal.positions:
+                self.coal.positions.remove(block)
+                self.coal.spawn_random(1)
+
         for pu in self.world_powerups:
             if pu.pos == self.train.body[0]:  # Train head
                 self.train.collect_powerup(pu.type)
@@ -261,7 +268,8 @@ class Game:
     def handle_you_died_menu_selection(self, option):
         if option == "Retry":
             self.train.reset()
-            self.coal.randomize()
+            self.coal.clear()
+            self.coal.spawn_random()
             self.world_powerups.clear()
             self.you_died_menu = None
         elif option == "Main Menu":
@@ -325,13 +333,13 @@ while True:
                 main_game.tutorial_mode = False
                 mark_tutorial_done()
                 if main_game.is_multiplayer:
-                    #spawn the ai here
+                    # spawn the ai here
                     print("spawn the ai here")
             else:
                 main_game.key_pressed_after_completion = False
     else:
         if main_game.is_multiplayer and not main_game.ai_spawned:
-            #spawn the ai here too
+            # spawn the ai here too
             print("spawn the ai here too")
             main_game.ai_spawned = True
     for event in pygame.event.get():
