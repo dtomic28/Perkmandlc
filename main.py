@@ -262,6 +262,7 @@ class Game:
         if option == "Retry":
             self.train.reset()
             self.coal.randomize()
+            self.world_powerups.clear()
             self.you_died_menu = None
         elif option == "Main Menu":
             self.return_to_main_menu()
