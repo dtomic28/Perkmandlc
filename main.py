@@ -6,6 +6,7 @@ from constants import CELL_COUNT, CELL_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, SKY_CO
 from entities.powerup_entity import PowerUpEntity, PowerUpType
 from entities.train import Train
 from entities.coal import Coal
+from entities.ai_train import AITrain
 from menu import MainMenu, Menu, YouDiedMenu
 from utils import is_first_time, mark_tutorial_done
 
@@ -19,7 +20,6 @@ class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
-        self.game_font = pygame.font.Font(None, 25)
         self.train = Train()
         self.coal = Coal()
         self.paused = False
@@ -29,7 +29,7 @@ class Game:
         self.main_menu = MainMenu(callback=self.handle_main_menu_selection)
         self.in_main_menu = True
         self.is_multiplayer = False
-        self.ai_spawned = False
+        self.ai_train = None
         self.difficulty = "Medium"
         self.tutorial_mode = is_first_time()
         self.tutorial_step = 0
@@ -43,6 +43,7 @@ class Game:
                 "assets/speed_boost_temp.png"
             ).convert_alpha(),
         }
+
         self.tutorial_steps = [
             {
                 "message": "Welcome to Perkmandelc! Use the arrow keys to move.",
@@ -57,6 +58,7 @@ class Game:
                 "condition": self.check_apple_eaten,
             },
         ]
+
         if self.is_multiplayer:
             self.tutorial_steps.append(
                 {
@@ -72,63 +74,190 @@ class Game:
                 }
             )
 
+    def get_safe_ai_spawn(self):
+        safe_margin = 8
+        for _ in range(20):
+            x = random.randint(safe_margin + 2, CELL_COUNT - safe_margin - 1)
+            y = random.randint(safe_margin, CELL_COUNT - safe_margin - 1)
+            pos = Vector2(x, y)
+            if all(pos.distance_to(p) > safe_margin for p in self.train.body):
+                return pos
+        return Vector2(CELL_COUNT - 5, CELL_COUNT - 5)  # fallback
+
     def spawn_random_powerup(self):
-        margin = 3  # avoid edge
+        margin = 3
         x = random.randint(margin, CELL_COUNT - 1 - margin)
         y = random.randint(0, (CELL_COUNT // 2) - 1) * 2
         y = max(y, margin)
         y = min(y, CELL_COUNT - 1 - margin)
-
         pos = Vector2(x, y)
         ptype = random.choice(list(self.powerup_images.keys()))
         image = self.powerup_images[ptype]
-
         self.world_powerups.append(PowerUpEntity(ptype, pos, image))
 
     def update(self):
-        if not self.paused and not self.in_main_menu and not self.you_died_menu:
-            self.train.update()
-            self.check_collision()
-            self.check_fail()
+        if self.paused or self.in_main_menu or self.you_died_menu:
+            return
 
-    def draw_tutorial_message(self):
-        if self.tutorial_mode and self.tutorial_step < len(self.tutorial_steps):
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 128))
-            self.screen.blit(overlay, (0, 0))
+        self.train.update()
+        self.check_collision()
+        self.check_fail()
 
-            font = pygame.font.Font(None, 36)
-            text = font.render(
-                self.tutorial_steps[self.tutorial_step]["message"],
-                True,
-                (255, 255, 255),
-            )
-
-            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT * 0.3))
-            self.screen.blit(text, text_rect)
+        if self.is_multiplayer and self.ai_train:
+            if self.ai_train.alive:
+                avoid = self.train.body
+                self.ai_train.update_ai(self.coal.positions, avoid, self.coal)
+            elif self.ai_train.ready_to_respawn():
+                spawn = self.get_safe_ai_spawn()
+                self.ai_train = AITrain(position=spawn)
 
     def draw_elements(self):
         if self.in_main_menu:
-            if self.options_menu:
-                self.options_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
-            else:
-                self.main_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+            (self.options_menu or self.main_menu).draw(
+                self.screen, SCREEN_WIDTH, SCREEN_HEIGHT
+            )
         elif self.you_died_menu:
             self.you_died_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
         else:
             self.draw_sky_and_ground()
             self.coal.draw(self.screen)
             self.train.draw(self.screen)
-            self.draw_score()
+            if self.ai_train and self.ai_train.alive:
+                self.ai_train.draw(self.screen)
             for powerup in self.world_powerups:
                 powerup.draw(self.screen)
             if self.paused:
-                if self.options_menu:
-                    self.options_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
-                elif self.pause_menu:
-                    self.pause_menu.draw(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+                (self.options_menu or self.pause_menu).draw(
+                    self.screen, SCREEN_WIDTH, SCREEN_HEIGHT
+                )
             if self.tutorial_mode and not self.paused:
                 self.draw_tutorial_message()
+            self.draw_score()
+
+    def check_collision(self):
+        # --- Player picks up coal ---
+        if self.coal.check_pickup(self.train.body[0]):
+            self.train.grow()
+            self.coal.spawn_random(2)
+
+        # --- AI picks up coal ---
+        if self.ai_train and self.ai_train.alive:
+            if self.coal.check_pickup(self.ai_train.body[0]):
+                self.ai_train.grow()
+                self.coal.spawn_random()
+
+        # --- Remove coal from train body (cleanup) ---
+        for block in self.train.body[1:]:
+            if block in self.coal.positions:
+                self.coal.positions.remove(block)
+                self.coal.spawn_random(1)
+
+        # --- Power-up pickup ---
+        for pu in self.world_powerups[:]:  # Safe removal while iterating
+            if pu.pos == self.train.body[0]:
+                self.train.collect_powerup(pu.type)
+                self.world_powerups.remove(pu)
+                break
+
+        # --- Player ↔ AI collision (Slither.io logic) ---
+        if self.ai_train and self.ai_train.alive:
+            player_head = self.train.body[0]
+            ai_head = self.ai_train.body[0]
+            player_body = self.train.body[1:]
+            ai_body = self.ai_train.body[1:]
+
+            # AI head hits player body → AI dies
+            if ai_head in player_body:
+                self.ai_train.die()
+
+            # Player head hits AI body → player dies
+            elif player_head in ai_body:
+                self.game_over()
+
+            # Head-on collision (optional: both die)
+            elif ai_head == player_head:
+                print("Head-on collision!")
+                self.game_over()
+                self.ai_train.die()
+
+    def check_fail(self):
+        head = self.train.body[0]
+        if head.x < 0 or head.x >= CELL_COUNT or head.y < 0 or head.y >= CELL_COUNT:
+            self.game_over()
+        if head in self.train.body[1:] and self.train.direction != Vector2(0, 0):
+            self.game_over()
+
+    def game_over(self):
+        score = len(self.train.body) - 3
+        self.you_died_menu = YouDiedMenu(
+            callback=self.handle_you_died_menu_selection, current_score=score
+        )
+
+    def handle_main_menu_selection(self, option):
+        if option == "Start Singleplayer":
+            self.in_main_menu = False
+            self.ai_train = None
+        elif option == "Start Multiplayer":
+            self.in_main_menu = False
+            self.is_multiplayer = True
+            spawn = self.get_safe_ai_spawn()
+            if self.ai_train:
+                self.ai_train.reset()
+            else:
+                self.ai_train = AITrain(position=spawn)
+        elif option == "Credits":
+            self.show_credits()
+        elif option == "Options":
+            self.show_options_menu()
+        elif option == "Quit Game":
+            pygame.quit()
+            sys.exit()
+
+    def handle_you_died_menu_selection(self, option):
+        if option == "Retry":
+            self.train.reset()
+            self.coal.clear()
+            self.coal.spawn_random(3)
+            self.world_powerups.clear()
+            self.you_died_menu = None
+
+            if self.ai_train:
+                self.ai_train.reset()
+        elif option == "Main Menu":
+            self.return_to_main_menu()
+
+    def return_to_main_menu(self):
+        self.__init__()
+
+    def draw_sky_and_ground(self):
+        pygame.draw.rect(self.screen, SKY_COLOR, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+        offset_y = SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)
+        for row in range(CELL_COUNT):
+            for col in range(CELL_COUNT):
+                x = col * CELL_SIZE
+                y = row * CELL_SIZE // 2 + offset_y
+                rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE // 2)
+                color = (150, 200, 80) if (row + col) % 2 == 0 else (100, 150, 50)
+                pygame.draw.rect(self.screen, color, rect)
+
+    def draw_score(self):
+        score_text = f"Score: {len(self.train.body) - 3}"
+        surface = pygame.font.Font(None, 25).render(score_text, True, (56, 74, 12))
+        rect = surface.get_rect(topleft=(SCREEN_WIDTH * 0.05, SCREEN_HEIGHT * 0.05))
+        pygame.draw.rect(self.screen, (167, 209, 61), rect.inflate(10, 10))
+        self.screen.blit(surface, rect)
+        pygame.draw.rect(self.screen, (56, 74, 12), rect.inflate(10, 10), 2)
+
+    def draw_tutorial_message(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))
+        self.screen.blit(overlay, (0, 0))
+        font = pygame.font.Font(None, 36)
+        text = font.render(
+            self.tutorial_steps[self.tutorial_step]["message"], True, (255, 255, 255)
+        )
+        rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT * 0.3))
+        self.screen.blit(text, rect)
 
     def check_movement(self):
         return self.train.direction != Vector2(0, 0)
@@ -153,32 +282,18 @@ class Game:
         self.paused = not self.paused
         if self.paused:
             self.pause_menu = Menu(
-                title="Pause Menu",
-                options=["Resume", "Options", "Main Menu", "Quit Game"],
-                callback=self.handle_pause_menu_selection,
+                "Pause Menu",
+                ["Resume", "Options", "Main Menu", "Quit Game"],
+                self.handle_pause_menu_selection,
             )
         else:
             self.pause_menu = None
 
-    def handle_main_menu_selection(self, option):
-        if option == "Start Singleplayer":
-            self.in_main_menu = False
-        elif option == "Start Multiplayer":
-            self.in_main_menu = False
-            self.is_multiplayer = True
-        elif option == "Credits":
-            self.show_credits()
-        elif option == "Options":
-            self.show_options_menu()
-        elif option == "Quit Game":
-            pygame.quit()
-            sys.exit()
-
     def show_options_menu(self):
         self.options_menu = Menu(
-            title="Options",
-            options=["Difficulty: " + self.difficulty, "Back"],
-            callback=self.handle_options_menu_selection,
+            "Options",
+            ["Difficulty: " + self.difficulty, "Back"],
+            self.handle_options_menu_selection,
         )
         self.pause_menu = None
         self.main_menu = None
@@ -186,27 +301,33 @@ class Game:
     def handle_options_menu_selection(self, option):
         if option.startswith("Difficulty"):
             difficulties = ["Easy", "Medium", "Hard"]
-            current_index = difficulties.index(self.difficulty)
-            self.difficulty = difficulties[(current_index + 1) % len(difficulties)]
+            i = difficulties.index(self.difficulty)
+            self.difficulty = difficulties[(i + 1) % len(difficulties)]
             self.options_menu.options[0] = "Difficulty: " + self.difficulty
         elif option == "Back":
-            if self.paused:
-                self.pause_menu = Menu(
-                    title="Pause Menu",
-                    options=["Resume", "Options", "Main Menu", "Quit Game"],
-                    callback=self.handle_pause_menu_selection,
+            self.pause_menu = (
+                Menu(
+                    "Pause Menu",
+                    ["Resume", "Options", "Main Menu", "Quit Game"],
+                    self.handle_pause_menu_selection,
                 )
-            else:
-                self.main_menu = MainMenu(callback=self.handle_main_menu_selection)
+                if self.paused
+                else None
+            )
+            self.main_menu = MainMenu(callback=self.handle_main_menu_selection)
             self.options_menu = None
 
     def show_credits(self):
-        credits_menu = Menu(
-            title="Credits",
-            options=["Tadej Sevšek", "Danijel Tomič", "Tilen Gašparič", "Back"],
-            callback=self.handle_credits_selection,
+        self.main_menu = Menu(
+            "Credits",
+            [
+                "Tadej Sev\u0161ek",
+                "Danijel Tomi\u010d",
+                "Tilen Ga\u0161pari\u010d",
+                "Back",
+            ],
+            self.handle_credits_selection,
         )
-        self.main_menu = credits_menu
 
     def handle_credits_selection(self, option):
         if option == "Back":
@@ -223,103 +344,6 @@ class Game:
             pygame.quit()
             sys.exit()
 
-    def return_to_main_menu(self):
-        self.in_main_menu = True
-        self.paused = False
-        self.pause_menu = None
-        self.options_menu = None
-        self.you_died_menu = None
-        self.main_menu = MainMenu(callback=self.handle_main_menu_selection)
-        self.train.reset()
-
-    def check_collision(self):
-        if self.coal.check_pickup(self.train.body[0]):
-            self.train.grow()
-            self.coal.spawn_random()
-
-        # Optional: Prevent food from spawning on tail
-        for block in self.train.body[1:]:
-            if block in self.coal.positions:
-                self.coal.positions.remove(block)
-                self.coal.spawn_random(1)
-
-        for pu in self.world_powerups:
-            if pu.pos == self.train.body[0]:  # Train head
-                self.train.collect_powerup(pu.type)
-                self.world_powerups.remove(pu)
-                break
-
-    def check_fail(self):
-        if (
-            not 0 <= self.train.body[0].x < CELL_COUNT
-            or not 0 <= self.train.body[0].y < CELL_COUNT
-        ):
-            self.game_over()
-        for block in self.train.body[1:]:
-            if block == self.train.body[0] and self.train.direction != Vector2(0, 0):
-                self.game_over()
-
-    def game_over(self):
-        current_score = len(self.train.body) - 3
-        self.you_died_menu = YouDiedMenu(
-            callback=self.handle_you_died_menu_selection, current_score=current_score
-        )
-
-    def handle_you_died_menu_selection(self, option):
-        if option == "Retry":
-            self.train.reset()
-            self.coal.clear()
-            self.coal.spawn_random()
-            self.world_powerups.clear()
-            self.you_died_menu = None
-        elif option == "Main Menu":
-            self.return_to_main_menu()
-
-    def draw_sky_and_ground(self):
-        pygame.draw.rect(self.screen, SKY_COLOR, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-
-        visual_offset_y = SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)
-
-        for row in range(CELL_COUNT):
-            for col in range(CELL_COUNT):
-                x_pos = col * CELL_SIZE
-                y_pos = row * CELL_SIZE // 2 + visual_offset_y
-
-                top_left = (x_pos, y_pos)
-                top_right = (x_pos + CELL_SIZE, y_pos)
-                bottom_left = (x_pos, y_pos + CELL_SIZE // 2)
-                bottom_right = (x_pos + CELL_SIZE, y_pos + CELL_SIZE // 2)
-
-                if (row + col) % 2 == 0:
-                    pygame.draw.polygon(
-                        self.screen,
-                        (150, 200, 80),
-                        [top_left, top_right, bottom_right, bottom_left],
-                    )  # Light green
-                else:
-                    pygame.draw.polygon(
-                        self.screen,
-                        (100, 150, 50),
-                        [top_left, top_right, bottom_right, bottom_left],
-                    )  # Dark green
-
-    def draw_score(self):
-        score_text = "Score: " + str(len(self.train.body) - 3)
-        score_surface = pygame.font.Font(None, 25).render(
-            score_text, True, (56, 74, 12)
-        )
-
-        score_x = int(SCREEN_WIDTH * 0.05)
-        score_y = int(SCREEN_HEIGHT * 0.05)
-
-        score_rect = score_surface.get_rect(topleft=(score_x, score_y))
-
-        pygame.draw.rect(self.screen, (167, 209, 61), score_rect.inflate(10, 10))
-
-        self.screen.blit(score_surface, score_rect)
-
-        pygame.draw.rect(self.screen, (56, 74, 12), score_rect.inflate(10, 10), 2)
-
 
 pygame.time.set_timer(SCREEN_UPDATE, 150)
 main_game = Game()
@@ -332,53 +356,29 @@ while True:
             if main_game.tutorial_step >= len(main_game.tutorial_steps):
                 main_game.tutorial_mode = False
                 mark_tutorial_done()
-                if main_game.is_multiplayer:
-                    # spawn the ai here
-                    print("spawn the ai here")
-            else:
-                main_game.key_pressed_after_completion = False
-    else:
-        if main_game.is_multiplayer and not main_game.ai_spawned:
-            # spawn the ai here too
-            print("spawn the ai here too")
-            main_game.ai_spawned = True
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        if (
-            event.type == SCREEN_UPDATE
-            and not main_game.paused
-            and not main_game.in_main_menu
-            and not main_game.you_died_menu
+        if event.type == SCREEN_UPDATE and not (
+            main_game.paused or main_game.in_main_menu or main_game.you_died_menu
         ):
             main_game.update()
         if event.type == pygame.KEYDOWN:
-            if (
-                not main_game.paused
-                and not main_game.in_main_menu
-                and not main_game.you_died_menu
+            if not (
+                main_game.paused or main_game.in_main_menu or main_game.you_died_menu
             ):
-                if event.key == pygame.K_UP and main_game.train.direction != Vector2(
-                    0, 1
-                ):
+                d = main_game.train.direction
+                if event.key == pygame.K_UP and d != Vector2(0, 1):
                     main_game.train.direction = Vector2(0, -1)
-                if event.key == pygame.K_DOWN and main_game.train.direction != Vector2(
-                    0, -1
-                ):
+                elif event.key == pygame.K_DOWN and d != Vector2(0, -1):
                     main_game.train.direction = Vector2(0, 1)
-                if event.key == pygame.K_LEFT and main_game.train.direction != Vector2(
-                    1, 0
-                ):
+                elif event.key == pygame.K_LEFT and d != Vector2(1, 0):
                     main_game.train.direction = Vector2(-1, 0)
-                if event.key == pygame.K_RIGHT and main_game.train.direction != Vector2(
-                    -1, 0
-                ):
+                elif event.key == pygame.K_RIGHT and d != Vector2(-1, 0):
                     main_game.train.direction = Vector2(1, 0)
-
-                if event.key == pygame.K_p:
+                elif event.key == pygame.K_p:
                     main_game.spawn_random_powerup()
-
             if event.key == pygame.K_ESCAPE:
                 main_game.toggle_pause()
             if (
@@ -386,16 +386,11 @@ while True:
                 and main_game.tutorial_step == len(main_game.tutorial_steps) - 1
             ):
                 main_game.key_pressed_after_completion = True
+
         if main_game.in_main_menu:
-            if main_game.options_menu:
-                main_game.options_menu.handle_input(event)
-            else:
-                main_game.main_menu.handle_input(event)
+            (main_game.options_menu or main_game.main_menu).handle_input(event)
         elif main_game.paused:
-            if main_game.pause_menu:
-                main_game.pause_menu.handle_input(event)
-            elif main_game.options_menu:
-                main_game.options_menu.handle_input(event)
+            (main_game.pause_menu or main_game.options_menu).handle_input(event)
         elif main_game.you_died_menu:
             main_game.you_died_menu.handle_input(event)
 
@@ -406,5 +401,4 @@ while True:
         main_game.screen.fill((255, 0, 0))
     main_game.draw_elements()
     pygame.display.update()
-
     main_game.clock.tick(60)
