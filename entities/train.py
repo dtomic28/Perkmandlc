@@ -21,6 +21,36 @@ class Train:
         self.__speed = 1
         self.active_powerups = []
 
+        # train images
+        try:
+            image_huntLeft = pygame.image.load("assets/hunt_left.png").convert_alpha()
+            self.image_huntLeft = pygame.transform.scale(image_huntLeft, (CELL_SIZE, CELL_SIZE))
+            image_huntRight = pygame.image.load("assets/hunt_right.png").convert_alpha()
+            self.image_huntRight = pygame.transform.scale(image_huntRight, (CELL_SIZE, CELL_SIZE))
+            image_huntUp = pygame.image.load("assets/hunt_up.png").convert_alpha()
+            self.image_huntUp = pygame.transform.scale(image_huntUp, (CELL_SIZE, CELL_SIZE))
+            image_huntDown = pygame.image.load("assets/hunt_down.png").convert_alpha()
+            self.image_huntDown = pygame.transform.scale(image_huntDown, (CELL_SIZE, CELL_SIZE))
+            
+            image_coalCartHorizontal = pygame.image.load("assets/coal_cart_horizontal.png").convert_alpha()
+            self.image_coalCartHorizontal = pygame.transform.scale(image_coalCartHorizontal, (CELL_SIZE, CELL_SIZE))
+            image_coalCartVertical = pygame.image.load("assets/coal_cart_vertical.png").convert_alpha()
+            self.image_coalCartVertical = pygame.transform.scale(image_coalCartVertical, (CELL_SIZE, CELL_SIZE))
+        except Exception:
+            print("Error loading train images, using colors instead.")
+            self.image_huntLeft = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_huntLeft.fill(TRAIN_HEAD_COLOR)
+            self.image_huntRight = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_huntRight.fill(TRAIN_HEAD_COLOR)
+            self.image_huntUp = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_huntUp.fill(TRAIN_HEAD_COLOR)
+            self.image_huntDown = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_huntDown.fill(TRAIN_HEAD_COLOR)
+            self.image_coalCartHorizontal = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_coalCartHorizontal.fill(TRAIN_BODY_COLOR)
+            self.image_coalCartVertical = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            self.image_coalCartVertical.fill(TRAIN_BODY_COLOR)
+
     def __move_once(self):
         if self.direction == Vector2(0, 0):
             return
@@ -73,25 +103,24 @@ class Train:
         body = (
             list(reversed(self.body)) if self.direction == Vector2(0, 1) else self.body
         )
+        body = self.body
 
         for index, block in enumerate(body):
             x = int(block.x * CELL_SIZE)
             y = int(block.y * CELL_SIZE // 2 + offset_y)
-            rect = pygame.Rect(x, y - CELL_SIZE // 2, CELL_SIZE, CELL_SIZE)
 
             if index == 0:
-                color = (
-                    TRAIN_HEAD_COLOR
-                    if self.direction != Vector2(0, 1)
-                    else TRAIN_TAIL_COLOR
-                )
-            elif index == len(body) - 1:
-                color = (
-                    TRAIN_TAIL_COLOR
-                    if self.direction != Vector2(0, 1)
-                    else TRAIN_HEAD_COLOR
-                )
+                if self.direction == Vector2(1, 0):  # Moving right
+                    screen.blit(self.image_huntRight, (x, y - CELL_SIZE // 2))
+                elif self.direction == Vector2(-1, 0):  # Moving left
+                    screen.blit(self.image_huntLeft, (x, y - CELL_SIZE // 2))
+                elif self.direction == Vector2(0, -1):  # Moving up
+                    screen.blit(self.image_huntUp, (x, y - CELL_SIZE // 2))
+                elif self.direction == Vector2(0, 1):  # Moving down
+                    screen.blit(self.image_huntDown, (x, y - CELL_SIZE // 2))
+                continue
             else:
-                color = TRAIN_BODY_COLOR
-
-            pygame.draw.rect(screen, color, rect)
+                if self.direction.x != 0:  # Horizontal movement
+                    screen.blit(self.image_coalCartHorizontal, (x, y - CELL_SIZE // 2))
+                else:  # Vertical movement
+                    screen.blit(self.image_coalCartVertical, (x, y - CELL_SIZE // 2))
