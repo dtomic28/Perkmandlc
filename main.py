@@ -42,6 +42,9 @@ class Game:
             PowerUpType.SPEED_BOOST: pygame.image.load(
                 "assets/speed_boost_temp.png"
             ).convert_alpha(),
+            PowerUpType.TORCH: pygame.image.load(
+                "assets/speed_boost_temp.png"
+            ).convert_alpha(),
         }
 
         self.tutorial_steps = [
@@ -78,7 +81,7 @@ class Game:
         fog_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         fog_surface.fill((0, 0, 0, 245))  # Mostly dark
 
-        if self.difficulty == "Easy":
+        if self.difficulty == "Easy" or self.train.fog_disabled:
             return
 
         radius = {"Easy": 200, "Medium": 120, "Hard": 60}.get(self.difficulty, 120)
@@ -117,7 +120,8 @@ class Game:
         y = max(y, margin)
         y = min(y, CELL_COUNT - 1 - margin)
         pos = Vector2(x, y)
-        ptype = random.choice(list(self.powerup_images.keys()))
+        # ptype = random.choice(list(self.powerup_images.keys()))
+        ptype = PowerUpType.TORCH
         image = self.powerup_images[ptype]
         self.world_powerups.append(PowerUpEntity(ptype, pos, image))
 

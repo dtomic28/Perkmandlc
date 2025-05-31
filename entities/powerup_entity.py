@@ -5,7 +5,8 @@ from pygame.math import Vector2
 
 
 class PowerUpType(Enum):
-    SPEED_BOOST = auto()
+    SPEED_BOOST = (1,)
+    TORCH = 2
 
 
 class PowerUpEntity:

@@ -11,6 +11,7 @@ from pygame.math import Vector2
 
 from entities.powerup_entity import PowerUpType
 from powerups.speed_boost import SpeedBoost
+from powerups.torch import TorchPowerUp
 
 
 class Train:
@@ -20,22 +21,39 @@ class Train:
         self.add_block_flag = False
         self.__speed = 1
         self.active_powerups = []
+        self.fog_disabled = False  # Used by fog of war
 
         # train images
         try:
             image_huntLeft = pygame.image.load("assets/hunt_left.png").convert_alpha()
-            self.image_huntLeft = pygame.transform.scale(image_huntLeft, (CELL_SIZE, CELL_SIZE))
+            self.image_huntLeft = pygame.transform.scale(
+                image_huntLeft, (CELL_SIZE, CELL_SIZE)
+            )
             image_huntRight = pygame.image.load("assets/hunt_right.png").convert_alpha()
-            self.image_huntRight = pygame.transform.scale(image_huntRight, (CELL_SIZE, CELL_SIZE))
+            self.image_huntRight = pygame.transform.scale(
+                image_huntRight, (CELL_SIZE, CELL_SIZE)
+            )
             image_huntUp = pygame.image.load("assets/hunt_up.png").convert_alpha()
-            self.image_huntUp = pygame.transform.scale(image_huntUp, (CELL_SIZE, CELL_SIZE))
+            self.image_huntUp = pygame.transform.scale(
+                image_huntUp, (CELL_SIZE, CELL_SIZE)
+            )
             image_huntDown = pygame.image.load("assets/hunt_down.png").convert_alpha()
-            self.image_huntDown = pygame.transform.scale(image_huntDown, (CELL_SIZE, CELL_SIZE))
-            
-            image_coalCartHorizontal = pygame.image.load("assets/coal_cart_horizontal.png").convert_alpha()
-            self.image_coalCartHorizontal = pygame.transform.scale(image_coalCartHorizontal, (CELL_SIZE, CELL_SIZE))
-            image_coalCartVertical = pygame.image.load("assets/coal_cart_vertical.png").convert_alpha()
-            self.image_coalCartVertical = pygame.transform.scale(image_coalCartVertical, (CELL_SIZE, CELL_SIZE))
+            self.image_huntDown = pygame.transform.scale(
+                image_huntDown, (CELL_SIZE, CELL_SIZE)
+            )
+
+            image_coalCartHorizontal = pygame.image.load(
+                "assets/coal_cart_horizontal.png"
+            ).convert_alpha()
+            self.image_coalCartHorizontal = pygame.transform.scale(
+                image_coalCartHorizontal, (CELL_SIZE, CELL_SIZE)
+            )
+            image_coalCartVertical = pygame.image.load(
+                "assets/coal_cart_vertical.png"
+            ).convert_alpha()
+            self.image_coalCartVertical = pygame.transform.scale(
+                image_coalCartVertical, (CELL_SIZE, CELL_SIZE)
+            )
         except Exception:
             print("Error loading train images, using colors instead.")
             self.image_huntLeft = pygame.Surface((CELL_SIZE, CELL_SIZE))
@@ -92,6 +110,8 @@ class Train:
     def collect_powerup(self, powerup_type):
         if powerup_type == PowerUpType.SPEED_BOOST:
             powerup = SpeedBoost(duration_ms=5000)
+        elif powerup_type == PowerUpType.TORCH:
+            powerup = TorchPowerUp(duration_ms=10000)
         else:
             return  # Unknown or unimplemented powerup type
 
