@@ -8,9 +8,10 @@ from entities.train import Train
 from entities.coal import Coal
 from entities.ai_train import AITrain
 from menu import MainMenu, Menu, YouDiedMenu
-from utils import is_first_time, mark_tutorial_done
 from events.EventScheduler import EventScheduler
 from events.Collapse import Collapse
+from utils import is_first_time, load_difficulty, mark_tutorial_done, save_difficulty
+
 
 pygame.init()
 
@@ -35,7 +36,7 @@ class Game:
         self.in_main_menu = True
         self.is_multiplayer = False
         self.ai_train = None
-        self.difficulty = "Medium"
+        self.difficulty = load_difficulty()
         self.tutorial_mode = is_first_time()
         self.tutorial_step = 0
         self.key_pressed_after_completion = False
@@ -47,7 +48,11 @@ class Game:
             PowerUpType.SPEED_BOOST: pygame.image.load(
                 "assets/speed_boost_temp.png"
             ).convert_alpha(),
+            PowerUpType.TORCH: pygame.image.load(
+                "assets/speed_boost_temp.png"
+            ).convert_alpha(),
         }
+        self.floor_image = self.set_floor_image()
 
         self.tutorial_steps = [
             {
@@ -79,7 +84,8 @@ class Game:
                 }
             )
 
-        self.floor_image = self.set_floor_image()
+
+        
     def set_floor_image(self):
         floor_images = []
         for i in range(1, 5):
@@ -93,6 +99,32 @@ class Game:
                 surface.blit(img, (col*CELL_SIZE, row * CELL_SIZE //2))
         return surface
     
+    def draw_fog_of_war(self):
+        fog_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        fog_surface.fill((0, 0, 0, 245))  # Mostly dark
+
+        if self.difficulty == "Easy" or self.train.fog_disabled:
+            return
+
+        radius = {"Easy": 200, "Medium": 120, "Hard": 60}.get(self.difficulty, 120)
+
+        def grid_to_screen(pos: Vector2):
+            offset_y = SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)
+            x = int(pos.x * CELL_SIZE)
+            y = int(pos.y * CELL_SIZE // 2 + offset_y - CELL_SIZE // 2)
+            return (x + CELL_SIZE // 2, y + CELL_SIZE // 2)  # center of tile
+
+        # Player spotlight
+        center = grid_to_screen(self.train.body[0])
+        pygame.draw.circle(fog_surface, (0, 0, 0, 0), center, radius)
+
+        # AI spotlight (if multiplayer)
+        if self.is_multiplayer and self.ai_train and self.ai_train.alive:
+            ai_center = grid_to_screen(self.ai_train.body[0])
+            pygame.draw.circle(fog_surface, (0, 0, 0, 0), ai_center, radius)
+
+        self.screen.blit(fog_surface, (0, 0))
+
     def get_safe_ai_spawn(self):
         safe_margin = 8
         for _ in range(20):
@@ -110,7 +142,8 @@ class Game:
         y = max(y, margin)
         y = min(y, CELL_COUNT - 1 - margin)
         pos = Vector2(x, y)
-        ptype = random.choice(list(self.powerup_images.keys()))
+        # ptype = random.choice(list(self.powerup_images.keys()))
+        ptype = PowerUpType.TORCH
         image = self.powerup_images[ptype]
         self.world_powerups.append(PowerUpEntity(ptype, pos, image))
 
@@ -147,6 +180,7 @@ class Game:
                 self.ai_train.draw(self.screen)
             for powerup in self.world_powerups:
                 powerup.draw(self.screen)
+            self.draw_fog_of_war()
             if self.paused:
                 (self.options_menu or self.pause_menu).draw(
                     self.screen, SCREEN_WIDTH, SCREEN_HEIGHT
@@ -327,6 +361,7 @@ class Game:
             i = difficulties.index(self.difficulty)
             self.difficulty = difficulties[(i + 1) % len(difficulties)]
             self.options_menu.options[0] = "Difficulty: " + self.difficulty
+            save_difficulty(self.difficulty)
         elif option == "Back":
             self.pause_menu = (
                 Menu(

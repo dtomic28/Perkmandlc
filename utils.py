@@ -2,7 +2,7 @@ import os
 import json
 
 SAVE_FILE = "save_data.json"
-DEFAULT_DATA = {"high_score": 0, "tutorial_done": False}
+DEFAULT_DATA = {"high_score": 0, "tutorial_done": False, "difficulty": "Medium"}
 
 
 def load_data():
@@ -37,4 +37,14 @@ def is_first_time():
 def mark_tutorial_done():
     data = load_data()
     data["tutorial_done"] = True
+    save_data(data)
+
+
+def load_difficulty():
+    return load_data().get("difficulty", "Medium")
+
+
+def save_difficulty(difficulty):
+    data = load_data()
+    data["difficulty"] = difficulty
     save_data(data)
