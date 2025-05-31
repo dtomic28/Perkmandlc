@@ -8,7 +8,10 @@ from entities.train import Train
 from entities.coal import Coal
 from entities.ai_train import AITrain
 from menu import MainMenu, Menu, YouDiedMenu
+from events.EventScheduler import EventScheduler
+from events.Collapse import Collapse
 from utils import is_first_time, load_difficulty, mark_tutorial_done, save_difficulty
+
 
 pygame.init()
 
@@ -22,6 +25,9 @@ class Game:
         self.clock = pygame.time.Clock()
         self.train = Train()
         self.coal = Coal()
+        self.collapse = Collapse()
+        self.event_scheduler = EventScheduler(10)
+        self.event_scheduler.add_event(self.collapse)
         self.paused = False
         self.pause_menu = None
         self.options_menu = None
@@ -46,6 +52,7 @@ class Game:
                 "assets/speed_boost_temp.png"
             ).convert_alpha(),
         }
+        self.floor_image = self.set_floor_image()
 
         self.tutorial_steps = [
             {
@@ -77,6 +84,21 @@ class Game:
                 }
             )
 
+
+        
+    def set_floor_image(self):
+        floor_images = []
+        for i in range(1, 5):
+            image = pygame.image.load(f"assets/floor{i}.png").convert_alpha()
+            image = pygame.transform.scale(image, (CELL_SIZE, CELL_SIZE // 2))
+            floor_images.append(image)
+        surface = pygame.Surface(((CELL_COUNT*CELL_SIZE), (CELL_COUNT*CELL_SIZE)), pygame.SRCALPHA)
+        for row in range(CELL_COUNT):
+            for col in range(CELL_COUNT):
+                img = random.choice(floor_images)
+                surface.blit(img, (col*CELL_SIZE, row * CELL_SIZE //2))
+        return surface
+    
     def draw_fog_of_war(self):
         fog_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         fog_surface.fill((0, 0, 0, 245))  # Mostly dark
@@ -131,7 +153,9 @@ class Game:
 
         self.train.update()
         self.check_collision()
+        self.event_scheduler.check_events(self)
         self.check_fail()
+            
 
         if self.is_multiplayer and self.ai_train:
             if self.ai_train.alive:
@@ -219,6 +243,9 @@ class Game:
             self.game_over()
 
     def game_over(self):
+        crash_sound = pygame.mixer.Sound("assets/sounds/crash.mp3")
+        crash_sound.set_volume(0.3)
+        crash_sound.play()
         score = len(self.train.body) - 3
         self.you_died_menu = YouDiedMenu(
             callback=self.handle_you_died_menu_selection, current_score=score
@@ -262,14 +289,13 @@ class Game:
 
     def draw_sky_and_ground(self):
         pygame.draw.rect(self.screen, SKY_COLOR, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-        offset_y = SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)
-        for row in range(CELL_COUNT):
-            for col in range(CELL_COUNT):
-                x = col * CELL_SIZE
-                y = row * CELL_SIZE // 2 + offset_y
-                rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE // 2)
-                color = (150, 200, 80) if (row + col) % 2 == 0 else (100, 150, 50)
-                pygame.draw.rect(self.screen, color, rect)
+        bg_image = pygame.image.load("assets/background.png").convert()
+        bg_image = pygame.transform.scale(bg_image, (SCREEN_WIDTH, SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)))
+        self.screen.blit(bg_image, (0, 0))
+        floor_surface = self.floor_image
+        x = 0
+        y = SCREEN_HEIGHT - (CELL_COUNT * CELL_SIZE // 2)
+        self.screen.blit(floor_surface, (x, y))
 
     def draw_score(self):
         score_text = f"Score: {len(self.train.body) - 3}"
@@ -379,6 +405,11 @@ class Game:
 
 pygame.time.set_timer(SCREEN_UPDATE, 150)
 main_game = Game()
+
+# Play ambient wind sound on repeat
+pygame.mixer.music.load("assets/sounds/ambient_wind.mp3")
+pygame.mixer.music.set_volume(0.1)
+pygame.mixer.music.play(-1)
 
 while True:
     if main_game.tutorial_mode:

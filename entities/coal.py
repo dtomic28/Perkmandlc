@@ -48,6 +48,8 @@ class Coal:
     def check_pickup(self, head_pos):
         for i, pos in enumerate(self.positions):
             if pos == head_pos:
+                plop_sound = pygame.mixer.Sound("assets/sounds/plop.mp3")
+                plop_sound.play()
                 del self.positions[i]
                 return True
         return False
