@@ -46,10 +46,10 @@ class Game:
 
         self.powerup_images = {
             PowerUpType.SPEED_BOOST: pygame.image.load(
-                "assets/speed_boost_temp.png"
+                "assets/speedup.png"
             ).convert_alpha(),
             PowerUpType.TORCH: pygame.image.load(
-                "assets/speed_boost_temp.png"
+                "assets/torch.png"
             ).convert_alpha(),
         }
         self.floor_image = self.set_floor_image()
